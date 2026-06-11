@@ -1,0 +1,15 @@
+# Core ML
+# NOTE: Install PyTorch with CUDA separately for GPU support:
+# pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+torch>=2.0.0
+torchvision>=0.15.0
+
+# HuggingFace
+transformers>=4.30.0
+
+# Image handling
+Pillow>=9.0.0
+pillow-heif>=0.10.0
+
+# Utilities
+tqdm>=4.0.0
