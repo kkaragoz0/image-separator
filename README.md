@@ -45,6 +45,18 @@ Images above the threshold go to `Unclassified/` rather than being forced into a
 | `Videos` | All video files (moved, not classified by CLIP) |
 | `Unclassified` | Images the model was uncertain about |
 
+### Nested folders
+
+The source directory is scanned **recursively** — all subdirectories are included automatically. Files from subfolders are renamed at the destination to avoid collisions:
+
+| Source path | Destination filename |
+|---|---|
+| `source/photo.jpg` | `photo.jpg` |
+| `source/2024/photo.jpg` | `2024_photo.jpg` |
+| `source/2024/Paris/photo.jpg` | `2024_Paris_photo.jpg` |
+
+If two paths still produce the same destination name after prefixing, a numeric suffix is appended (`_2`, `_3`, …). The CSV log always records the final destination filename so the original location can be traced.
+
 ### Supported formats
 
 **Images:** `.jpg` `.jpeg` `.png` `.webp` `.heic` `.heif` `.gif` `.bmp` `.tiff`

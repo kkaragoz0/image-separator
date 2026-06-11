@@ -149,15 +149,49 @@ def classify_batch(
     return results
 
 
+def _collect_files(source_dir: str, extensions: set) -> list[tuple[str, str]]:
+    """
+    Recursively collect all files matching extensions under source_dir.
+    Returns list of (full_source_path, dest_filename).
+
+    Files at root level keep their original name.
+    Files in subfolders are prefixed with their relative path (sep → _) to avoid
+    collisions between files with the same name in different subdirectories.
+    Any remaining collision gets a numeric suffix.
+    """
+    used: set[str] = set()
+    result = []
+
+    for dirpath, _, filenames in os.walk(source_dir):
+        for filename in filenames:
+            if os.path.splitext(filename)[1].lower() not in extensions:
+                continue
+
+            full_path = os.path.join(dirpath, filename)
+            rel_dir   = os.path.relpath(dirpath, source_dir)
+            dest_name = filename if rel_dir == "." else f"{rel_dir.replace(os.sep, '_')}_{filename}"
+
+            if dest_name in used:
+                base, ext = os.path.splitext(dest_name)
+                i = 2
+                while f"{base}_{i}{ext}" in used:
+                    i += 1
+                dest_name = f"{base}_{i}{ext}"
+
+            used.add(dest_name)
+            result.append((full_path, dest_name))
+
+    return result
+
+
 def move_videos(source_dir: str, target_dir: str):
     video_dir = os.path.join(target_dir, "Videos")
     os.makedirs(video_dir, exist_ok=True)
 
     moved = 0
-    for filename in os.listdir(source_dir):
-        if os.path.splitext(filename)[1].lower() in VIDEO_EXTENSIONS:
-            shutil.move(os.path.join(source_dir, filename), os.path.join(video_dir, filename))
-            moved += 1
+    for full_path, dest_name in _collect_files(source_dir, VIDEO_EXTENSIONS):
+        shutil.move(full_path, os.path.join(video_dir, dest_name))
+        moved += 1
 
     print(f"Moved {moved} video(s) to {video_dir}")
 
@@ -174,10 +208,7 @@ def run_classification(
     for folder in list(CATEGORIES.keys()) + ["Unclassified"]:
         os.makedirs(os.path.join(target_dir, folder), exist_ok=True)
 
-    image_files = [
-        f for f in os.listdir(source_dir)
-        if os.path.splitext(f)[1].lower() in IMAGE_EXTENSIONS
-    ]
+    all_files = _collect_files(source_dir, IMAGE_EXTENSIONS)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_path = os.path.join(target_dir, f"classification_log_{timestamp}.csv")
@@ -187,17 +218,17 @@ def run_classification(
         writer = csv.writer(csvfile)
         writer.writerow(["filename", "assigned_folder", "top_confidence", "normalized_entropy"])
 
-        for i in tqdm(range(0, len(image_files), BATCH_SIZE)):
-            batch_filenames = image_files[i: i + BATCH_SIZE]
-            images, valid_filenames = [], []
+        for i in tqdm(range(0, len(all_files), BATCH_SIZE)):
+            batch = all_files[i: i + BATCH_SIZE]
+            images, valid_files = [], []
 
-            for filename in batch_filenames:
+            for full_path, dest_name in batch:
                 try:
-                    img = Image.open(os.path.join(source_dir, filename)).convert("RGB")
+                    img = Image.open(full_path).convert("RGB")
                     images.append(img)
-                    valid_filenames.append(filename)
+                    valid_files.append((full_path, dest_name))
                 except Exception as e:
-                    print(f"Error opening {filename}: {e}")
+                    print(f"Error opening {full_path}: {e}")
 
             if not images:
                 continue
@@ -211,20 +242,14 @@ def run_classification(
                 for img in images:
                     img.close()
 
-            for filename, (folder, conf, entropy) in zip(valid_filenames, results):
-                writer.writerow([filename, folder, conf, entropy])
+            for (full_path, dest_name), (folder, conf, entropy) in zip(valid_files, results):
+                writer.writerow([dest_name, folder, conf, entropy])
 
                 if entropy <= entropy_threshold:
-                    shutil.move(
-                        os.path.join(source_dir, filename),
-                        os.path.join(target_dir, folder, filename),
-                    )
+                    shutil.move(full_path, os.path.join(target_dir, folder, dest_name))
                     counts[folder] += 1
                 else:
-                    shutil.move(
-                        os.path.join(source_dir, filename),
-                        os.path.join(target_dir, "Unclassified", f"{entropy}_{filename}"),
-                    )
+                    shutil.move(full_path, os.path.join(target_dir, "Unclassified", f"{entropy}_{dest_name}"))
                     counts["Unclassified"] += 1
 
     print("\n--- Classification Summary ---")
