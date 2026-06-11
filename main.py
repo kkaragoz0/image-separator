@@ -214,7 +214,7 @@ def run_classification(
     log_path = os.path.join(target_dir, f"classification_log_{timestamp}.csv")
     counts = {folder: 0 for folder in list(CATEGORIES.keys()) + ["Unclassified"]}
 
-    with open(log_path, "w", newline="") as csvfile:
+    with open(log_path, "w", newline="", encoding="utf-8-sig") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(["filename", "assigned_folder", "top_confidence", "normalized_entropy"])
 
